@@ -1,14 +1,16 @@
 
 #include "bbhttpd.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
+#include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <fcntl.h>
+#include <unistd.h>
 
 struct bbhttpd_t_
 {
@@ -102,14 +104,59 @@ bbhttpd_request_t* bbhttpd_get_request(bbhttpd_t* bbhttpd)
 	return request;
 }
 
-void bbhttpd_send_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request, bbhttpd_response_t* response)
+bbhttpd_request_method_t bbhttpd_request_get_method(const bbhttpd_request_t* request)
+{
+	if (strncmp("GET", request->raw, 3) == 0)
+		return BBHTTPD_REQUEST_METHOD_GET;
+	else if (strncmp("POST", request->raw, 4) == 0)
+		return BBHTTPD_REQUEST_METHOD_POST;
+	return BBHTTPD_REQUEST_METHOD_UNSUPPORTED;
+}
+
+size_t bbhttpd_request_get_path(const bbhttpd_request_t* request, char* path, size_t max_len)
+{
+	if (!path)
+		return 0;
+
+	const char* text = request->raw;
+	const char* path_start = 0;
+	for (path_start = text+1; path_start < text + request->raw_length && *(path_start-1) != ' '; ++path_start)
+		;
+	const char* path_end = 0;
+	for (path_end = path_start; path_end < text + request->raw_length && *path_end != ' '; ++path_end)
+		;
+
+	if (!path_start || !path_end)
+		return 0;
+
+	const size_t path_len = path_end - path_start;
+	const size_t copy_len = (path_len+1) < max_len ? path_len : max_len-1;
+	strncpy(path, path_start, copy_len);
+	path[copy_len] = 0;
+	return copy_len;
+}
+
+void bbhttpd_destroy_request(bbhttpd_request_t* request)
+{
+	close(request->fd);
+	free(request->raw);
+	free(request);
+}
+
+void bbhttpd_send_response(bbhttpd_request_t* request, bbhttpd_response_t* response)
 {
 	char buf[32];
 	snprintf(buf, 32, "HTTP/1.0 %d\r\n\r\n", response->status);
 	send(request->fd, buf, strlen(buf), 0);
 	send(request->fd, response->body, response->body_length, 0);
-	close(request->fd);
-	free(request->raw);
-	free(request);
+	bbhttpd_destroy_request(request);
+}
+
+void bbhttpd_decline_response(bbhttpd_request_t* request)
+{
+	char buf[32];
+	snprintf(buf, 32, "HTTP/1.0 400\r\n\r\n");
+	send(request->fd, buf, strlen(buf), 0);
+	bbhttpd_destroy_request(request);
 }
 
