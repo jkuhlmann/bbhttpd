@@ -9,7 +9,10 @@ typedef struct
 	const char* ip;
 	int port;
 	size_t max_request_size;
+	int blocking_accept;
 } bbhttpd_config_t;
+
+#define BBHTTPD_CONFIG_INIT	{ "0.0.0.0", 8080, 2048, 1 }
 
 typedef enum
 {

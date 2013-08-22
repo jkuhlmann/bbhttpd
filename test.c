@@ -6,11 +6,7 @@
 
 int main(int argc, char* argv[])
 {
-	bbhttpd_config_t config;
-	config.ip = "0.0.0.0";
-	config.port = 8080;
-	config.max_request_size = 2048;
-
+	bbhttpd_config_t config = BBHTTPD_CONFIG_INIT;
 	bbhttpd_t* bbhttpd = bbhttpd_start(&config);
 	if (!bbhttpd)
 	{

@@ -29,7 +29,7 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 		return NULL;
 	}
 
-	if (fcntl(bbhttpd->fd, F_SETFL, O_NONBLOCK) == -1)
+	if (!config->blocking_accept && fcntl(bbhttpd->fd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		free(bbhttpd);
 		return NULL;
