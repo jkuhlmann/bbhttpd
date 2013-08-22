@@ -1,4 +1,10 @@
 
+/* BBHTTPD test program
+ *
+ * Compile with:
+ * gcc -Wall -Wextra -std=c89 -pedantic -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition -ansi -Werror -O -g *.c
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include "bbhttpd.h"
@@ -6,8 +12,14 @@
 
 int main(int argc, char* argv[])
 {
+	char path[512];
+
 	bbhttpd_config_t config = BBHTTPD_CONFIG_INIT;
 	bbhttpd_t* bbhttpd = bbhttpd_start(&config);
+
+	(void)argc;
+	(void)argv;
+
 	if (!bbhttpd)
 	{
 		printf("Unable to listen\n");
@@ -20,7 +32,6 @@ int main(int argc, char* argv[])
 		if (request)
 		{
 			((char*)request->raw)[request->raw_length] = 0;
-			char path[512];
 			bbhttpd_request_get_path(request, path, 512);
 			printf("Got %d request on %s:\n%s", bbhttpd_request_get_method(request), path, (char*)request->raw);
 			if (strcmp(path, "/testerror") == 0)
@@ -30,12 +41,12 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				printf("Sending response\n");
+				const char* test_response = "HELLO BROWSER! HELLOHELLO!";
 				bbhttpd_response_t response;
 				response.status = 200;
-				const char* test_response = "HELLO BROWSER! HELLOHELLO!";
 				response.body = test_response;
 				response.body_length = strlen(test_response);
+				printf("Sending response\n");
 				bbhttpd_send_response(request, &response);
 			}
 		}
