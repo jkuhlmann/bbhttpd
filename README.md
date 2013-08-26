@@ -19,7 +19,7 @@ Usage
 bbhttpd_config_t config = BBHTTPD_CONFIG_INIT;
 bbhttpd_t* bbhttpd = bbhttpd_start(&config);
 
-while (1)
+while (!do_exit)
 {
 	bbhttpd_request_t* request = bbhttpd_get_request(bbhttpd);
 	if (request)
@@ -29,7 +29,7 @@ while (1)
 		response.status = 200;
 		response.body = test_response;
 		response.body_length = strlen(test_response);
-		bbhttpd_send_response(request, &response);
+		bbhttpd_send_response(bbhttpd, request, &response);
 	}
 }
 
