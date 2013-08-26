@@ -1,4 +1,4 @@
-/* BBHTTPD - The barebones HTTPD daemon
+/* BBHTTPD - The barebones HTTP daemon
  *
  * Copyright (c) 2013 Johannes Kuhlmann
  *
@@ -25,6 +25,7 @@
 #define BBHTTPD_H_
 
 #include <stddef.h>
+#include <stdlib.h>
 
 typedef struct
 {
@@ -32,9 +33,11 @@ typedef struct
 	int port;
 	size_t max_request_size;
 	int blocking_accept;
+	void* (*bbhttpd_malloc)(size_t size);
+	void (*bbhttpd_free)(void* ptr);
 } bbhttpd_config_t;
 
-#define BBHTTPD_CONFIG_INIT	{ "0.0.0.0", 8080, 2048, 1 }
+#define BBHTTPD_CONFIG_INIT	{ "0.0.0.0", 8080, 2048, 1, malloc, free }
 
 typedef enum
 {
@@ -71,8 +74,8 @@ bbhttpd_request_t* bbhttpd_get_request(bbhttpd_t* bbhttpd);
 bbhttpd_request_method_t bbhttpd_request_get_method(const bbhttpd_request_t* request);
 size_t bbhttpd_request_get_path(const bbhttpd_request_t* request, char* path, size_t max_len);
 
-void bbhttpd_send_response(bbhttpd_request_t* request, bbhttpd_response_t* response);
-void bbhttpd_decline_response(bbhttpd_request_t* request);
+void bbhttpd_send_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request, bbhttpd_response_t* response);
+void bbhttpd_decline_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request);
 
 #ifdef __cplusplus
 }

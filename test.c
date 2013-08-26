@@ -1,4 +1,4 @@
-/* BBHTTPD - The barebones HTTPD daemon
+/* BBHTTPD - The barebones HTTP daemon
  *
  * Copyright (c) 2013 Johannes Kuhlmann
  *
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
 			if (strcmp(path, "/testerror") == 0)
 			{
 				printf("Declining to respond\n");
-				bbhttpd_decline_response(request);
+				bbhttpd_decline_response(bbhttpd, request);
 			}
 			else
 			{
@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
 				response.body = test_response;
 				response.body_length = strlen(test_response);
 				printf("Sending response\n");
-				bbhttpd_send_response(request, &response);
+				bbhttpd_send_response(bbhttpd, request, &response);
 			}
 		}
 	}

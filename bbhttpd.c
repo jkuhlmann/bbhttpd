@@ -1,4 +1,4 @@
-/* BBHTTPD - The barebones HTTPD daemon
+/* BBHTTPD - The barebones HTTP daemon
  *
  * Copyright (c) 2013 Johannes Kuhlmann
  *
@@ -38,13 +38,15 @@ struct bbhttpd_t_
 {
 	int fd;
 	size_t max_request_size;
+	void* (*bbhttpd_malloc)(size_t size);
+	void (*bbhttpd_free)(void* ptr);
 };
 
-void bbhttpd_destroy_request(bbhttpd_request_t* request);
+static void bbhttpd_destroy_request(bbhttpd_t* bbhttpd, bbhttpd_request_t* request);
 
 bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 {
-	bbhttpd_t* bbhttpd = (bbhttpd_t*)malloc(sizeof(bbhttpd_t));
+	bbhttpd_t* bbhttpd = (bbhttpd_t*)config->bbhttpd_malloc(sizeof(bbhttpd_t));
 	int sock_reuse_optval = 1;
 	struct sockaddr_in addr;
 	struct in_addr inp;
@@ -52,13 +54,13 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 	bbhttpd->fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (bbhttpd->fd == -1)
 	{
-		free(bbhttpd);
+		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
 	if (!config->blocking_accept && fcntl(bbhttpd->fd, F_SETFL, O_NONBLOCK) == -1)
 	{
-		free(bbhttpd);
+		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
@@ -66,7 +68,7 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 
 	if (!inet_pton(AF_INET, config->ip, &inp))
 	{
-		free(bbhttpd);
+		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 	addr.sin_addr.s_addr = inp.s_addr;
@@ -75,17 +77,19 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 
 	if (bind(bbhttpd->fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) == -1)
 	{
-		free(bbhttpd);
+		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
 	if (listen(bbhttpd->fd, 8) == -1)
 	{
-		free(bbhttpd);
+		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
 	bbhttpd->max_request_size = config->max_request_size;
+	bbhttpd->bbhttpd_malloc = config->bbhttpd_malloc;
+	bbhttpd->bbhttpd_free = config->bbhttpd_free;
 
 	return bbhttpd;
 }
@@ -97,7 +101,7 @@ void bbhttpd_stop(bbhttpd_t* bbhttpd)
 		return;
 	}
 	close(bbhttpd->fd);
-	free(bbhttpd);
+	bbhttpd->bbhttpd_free(bbhttpd);
 }
 
 bbhttpd_request_t* bbhttpd_get_request(bbhttpd_t* bbhttpd)
@@ -113,15 +117,15 @@ bbhttpd_request_t* bbhttpd_get_request(bbhttpd_t* bbhttpd)
 		return NULL;
 	}
 
-	request = (bbhttpd_request_t*)malloc(sizeof(bbhttpd_request_t));
-	request->raw = malloc(bbhttpd->max_request_size);
+	request = (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
+	request->raw = bbhttpd->bbhttpd_malloc(bbhttpd->max_request_size);
 	request->fd = remote_fd;
 
 	recv_length = recv(remote_fd, request->raw, bbhttpd->max_request_size, 0);
 	if (recv_length == -1)
 	{
-		free(request->raw);
-		free(request);
+		bbhttpd->bbhttpd_free(request->raw);
+		bbhttpd->bbhttpd_free(request);
 		return NULL;
 	}
 
@@ -165,27 +169,27 @@ size_t bbhttpd_request_get_path(const bbhttpd_request_t* request, char* path, si
 	return copy_len;
 }
 
-void bbhttpd_destroy_request(bbhttpd_request_t* request)
+static void bbhttpd_destroy_request(bbhttpd_t* bbhttpd, bbhttpd_request_t* request)
 {
 	close(request->fd);
-	free(request->raw);
-	free(request);
+	bbhttpd->bbhttpd_free(request->raw);
+	bbhttpd->bbhttpd_free(request);
 }
 
-void bbhttpd_send_response(bbhttpd_request_t* request, bbhttpd_response_t* response)
+void bbhttpd_send_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request, bbhttpd_response_t* response)
 {
 	char buf[32];
 	sprintf(buf, "HTTP/1.0 %d\r\n\r\n", response->status);
 	send(request->fd, buf, strlen(buf), 0);
 	send(request->fd, response->body, response->body_length, 0);
-	bbhttpd_destroy_request(request);
+	bbhttpd_destroy_request(bbhttpd, request);
 }
 
-void bbhttpd_decline_response(bbhttpd_request_t* request)
+void bbhttpd_decline_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request)
 {
 	char buf[32];
 	sprintf(buf, "HTTP/1.0 400\r\n\r\n");
 	send(request->fd, buf, strlen(buf), 0);
-	bbhttpd_destroy_request(request);
+	bbhttpd_destroy_request(bbhttpd, request);
 }
 
