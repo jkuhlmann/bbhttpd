@@ -33,11 +33,12 @@ typedef struct
 	int port;
 	size_t max_request_size;
 	int blocking_accept;
+	int single_request;
 	void* (*bbhttpd_malloc)(size_t size);
 	void (*bbhttpd_free)(void* ptr);
 } bbhttpd_config_t;
 
-#define BBHTTPD_CONFIG_INIT	{ "0.0.0.0", 8080, 2048, 1, malloc, free }
+#define BBHTTPD_CONFIG_INIT	{ "0.0.0.0", 8080, 2048, 1, 1, malloc, free }
 
 typedef enum
 {

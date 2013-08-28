@@ -38,6 +38,8 @@ struct bbhttpd_t_
 {
 	int fd;
 	size_t max_request_size;
+	int single_request;
+	bbhttpd_request_t* request;
 	void* (*bbhttpd_malloc)(size_t size);
 	void (*bbhttpd_free)(void* ptr);
 };
@@ -91,6 +93,14 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 	bbhttpd->bbhttpd_malloc = config->bbhttpd_malloc;
 	bbhttpd->bbhttpd_free = config->bbhttpd_free;
 
+	bbhttpd->single_request = config->single_request;
+	if (bbhttpd->single_request)
+	{
+		bbhttpd->request =  (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
+		bbhttpd->request->raw = bbhttpd->bbhttpd_malloc(bbhttpd->max_request_size);
+	}
+
+
 	return bbhttpd;
 }
 
@@ -100,6 +110,13 @@ void bbhttpd_stop(bbhttpd_t* bbhttpd)
 	{
 		return;
 	}
+
+	if (bbhttpd->single_request)
+	{
+		bbhttpd->bbhttpd_free(bbhttpd->request->raw);
+		bbhttpd->bbhttpd_free(bbhttpd->request);
+	}
+
 	close(bbhttpd->fd);
 	bbhttpd->bbhttpd_free(bbhttpd);
 }
@@ -117,8 +134,16 @@ bbhttpd_request_t* bbhttpd_get_request(bbhttpd_t* bbhttpd)
 		return NULL;
 	}
 
-	request = (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
-	request->raw = bbhttpd->bbhttpd_malloc(bbhttpd->max_request_size);
+	if (bbhttpd->single_request)
+	{
+		request = bbhttpd->request;
+	}
+	else
+	{
+		request = (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
+		request->raw = bbhttpd->bbhttpd_malloc(bbhttpd->max_request_size);
+	}
+
 	request->fd = remote_fd;
 
 	recv_length = recv(remote_fd, request->raw, bbhttpd->max_request_size, 0);
@@ -172,8 +197,11 @@ size_t bbhttpd_request_get_path(const bbhttpd_request_t* request, char* path, si
 static void bbhttpd_destroy_request(bbhttpd_t* bbhttpd, bbhttpd_request_t* request)
 {
 	close(request->fd);
-	bbhttpd->bbhttpd_free(request->raw);
-	bbhttpd->bbhttpd_free(request);
+	if (!bbhttpd->single_request)
+	{
+		bbhttpd->bbhttpd_free(request->raw);
+		bbhttpd->bbhttpd_free(request);
+	}
 }
 
 void bbhttpd_send_response(bbhttpd_t* bbhttpd, bbhttpd_request_t* request, bbhttpd_response_t* response)
