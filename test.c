@@ -31,13 +31,30 @@
 #include <string.h>
 #include "bbhttpd.h"
 
+#if defined(_MSC_VER)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 
 int main(int argc, char* argv[])
 {
 	char path[512];
 
 	bbhttpd_config_t config = BBHTTPD_CONFIG_INIT;
-	bbhttpd_t* bbhttpd = bbhttpd_start(&config);
+	bbhttpd_t* bbhttpd;
+
+#if defined(_MSC_VER)
+	WSADATA wsaData;
+	if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0)
+	{
+		return -1;
+	}
+#endif
+	
+	bbhttpd = bbhttpd_start(&config);
 
 	(void)argc;
 	(void)argv;
@@ -75,6 +92,10 @@ int main(int argc, char* argv[])
 	}
 
 	bbhttpd_stop(bbhttpd);
+
+#if defined(_MSC_VER)
+	WSACleanup();
+#endif
 
 	return 0;
 }

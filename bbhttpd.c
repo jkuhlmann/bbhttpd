@@ -27,12 +27,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <arpa/inet.h>
 #include <fcntl.h>
-#include <netinet/in.h>
 #include <sys/types.h>
+
+#if defined(__linux) || defined(__linux__) || defined(linux) || defined(LINUX)
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#define BBHTTPD_LINUX
+#define BBHTTPD_SOCKET			int
+#define BBHTTPD_SOCKET_ERROR	-1
+#elif defined(_WIN32) || defined(__WIN32__) || defined(_MSC_VER)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define BBHTTPD_WIN
+#define BBHTTPD_SOCKET			SOCKET
+#define BBHTTPD_SOCKET_ERROR	SOCKET_ERROR
+#endif
 
 struct bbhttpd_t_
 {
@@ -53,20 +65,34 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 	struct sockaddr_in addr;
 	struct in_addr inp;
 
+#if defined(BBHTTPD_LINUX)
 	bbhttpd->fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (bbhttpd->fd == -1)
+#elif defined(BBHTTPD_WIN)
+	u_long NonBlock = 1;
+	bbhttpd->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#endif
+
+	if (bbhttpd->fd == BBHTTPD_SOCKET_ERROR)
 	{
 		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
-	if (!config->blocking_accept && fcntl(bbhttpd->fd, F_SETFL, O_NONBLOCK) == -1)
+#if defined(BBHTTPD_LINUX)
+	if (!config->blocking_accept && fcntl(bbhttpd->fd, F_SETFL, O_NONBLOCK) == BBHTTPD_SOCKET_ERROR)
 	{
 		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
 	setsockopt(bbhttpd->fd, SOL_SOCKET, SO_REUSEADDR, &sock_reuse_optval, sizeof(sock_reuse_optval));
+#elif defined(BBHTTPD_WIN)
+	if (!config->blocking_accept && ioctlsocket(bbhttpd->fd, FIONBIO, &NonBlock) == BBHTTPD_SOCKET_ERROR)
+	{
+		config->bbhttpd_free(bbhttpd);
+		return NULL;
+	}
+#endif
 
 	if (!inet_pton(AF_INET, config->ip, &inp))
 	{
@@ -77,13 +103,13 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(config->port);
 
-	if (bind(bbhttpd->fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) == -1)
+	if (bind(bbhttpd->fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) == BBHTTPD_SOCKET_ERROR)
 	{
 		config->bbhttpd_free(bbhttpd);
 		return NULL;
 	}
 
-	if (listen(bbhttpd->fd, 8) == -1)
+	if (listen(bbhttpd->fd, 8) == BBHTTPD_SOCKET_ERROR)
 	{
 		config->bbhttpd_free(bbhttpd);
 		return NULL;
@@ -96,7 +122,7 @@ bbhttpd_t* bbhttpd_start(const bbhttpd_config_t* config)
 	bbhttpd->single_request = config->single_request;
 	if (bbhttpd->single_request)
 	{
-		bbhttpd->request =  (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
+		bbhttpd->request = (bbhttpd_request_t*)bbhttpd->bbhttpd_malloc(sizeof(bbhttpd_request_t));
 		bbhttpd->request->raw = bbhttpd->bbhttpd_malloc(bbhttpd->max_request_size);
 	}
 
@@ -117,7 +143,11 @@ void bbhttpd_stop(bbhttpd_t* bbhttpd)
 		bbhttpd->bbhttpd_free(bbhttpd->request);
 	}
 
+#if defined(BBHTTPD_LINUX)
 	close(bbhttpd->fd);
+#elif defined(BBHTTPD_WIN)
+	closesocket(bbhttpd->fd);
+#endif
 	bbhttpd->bbhttpd_free(bbhttpd);
 }
 
@@ -196,7 +226,11 @@ size_t bbhttpd_request_get_path(const bbhttpd_request_t* request, char* path, si
 
 static void bbhttpd_destroy_request(bbhttpd_t* bbhttpd, bbhttpd_request_t* request)
 {
+#if defined(BBHTTPD_LINUX)
 	close(request->fd);
+#elif defined(BBHTTPD_WIN)
+	closesocket(request->fd);
+#endif
 	if (!bbhttpd->single_request)
 	{
 		bbhttpd->bbhttpd_free(request->raw);
